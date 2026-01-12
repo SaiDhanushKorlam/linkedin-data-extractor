@@ -1,0 +1,91 @@
+{
+  "post_extraction_example": {
+    "metadata": {
+      "post_url": "https://www.linkedin.com/posts/williamhgates_idontread-much-fiction-butremarkably-activity-7405356028634050561-4zxY",
+      "post_id": "7405356028634050561",
+      "author_name": "Bill Gates",
+      "author_profile_url": "https://www.linkedin.com/in/williamhgates",
+      "posted_date": "1 day ago",
+      "extraction_timestamp": "2026-01-12T11:20:00.000Z"
+    },
+    "content": {
+      "full_text": "I don't read much fiction, but Remarkably Bright Creatures won me over. The novel follows the relationship of a 70-year-old aquarium janitor named Tova with a giant Pacific octopus named Marcellus—and offers a thoughtful reflection on the meaning of life and growing older",
+      "summary": "Book recommendation about Remarkably Bright Creatures - a novel about a 70-year-old aquarium janitor and a giant Pacific octopus that explores life meaning and aging",
+      "content_type": "text",
+      "language": "en",
+      "word_count": 45,
+      "character_count": 273
+    },
+    "engagement": {
+      "likes": 1033,
+      "comments": 173,
+      "shares": 0,
+      "views": 0,
+      "engagement_rate": "N/A"
+    },
+    "media": {
+      "has_media": true,
+      "media_type": "image",
+      "media_urls": [
+        "https://media.licdn.com/dms/image/v2/D5622AQEH0fDC7JSpMw/feedshare-shrink_2048_1536/B56ZsUcEUzKAA0-/0/1765574461245"
+      ],
+      "image_count": 1,
+      "video_count": 0
+    },
+    "topics": {
+      "hashtags": [],
+      "mentions": [],
+      "links": [
+        "https://lnkd.in/gRxdEntY"
+      ],
+      "topics": [
+        "books",
+        "fiction",
+        "aging",
+        "life_meaning",
+        "personal_development"
+      ],
+      "keywords": [
+        "fiction",
+        "remarkably",
+        "bright",
+        "creatures",
+        "novel",
+        "relationship",
+        "aquarium",
+        "janitor",
+        "octopus",
+        "reflection"
+      ]
+    },
+    "classification": {
+      "post_type": "recommendation",
+      "sentiment": "positive",
+      "category": "thought_leadership",
+      "is_promotional": false,
+      "is_question": false
+    },
+    "raw_data": {
+      "raw_text": "Full raw text from LinkedIn post...",
+      "source": "Exa AI"
+    }
+  },
+  "usage_instructions": {
+    "description": "This JSON structure provides comprehensive post data extraction",
+    "fields_explained": {
+      "metadata": "Basic post information including URLs, IDs, author, and timestamps",
+      "content": "Full post text, summary, type, language, and character/word counts",
+      "engagement": "Likes, comments, shares, views, and calculated engagement rate",
+      "media": "Media presence detection, types, URLs, and counts",
+      "topics": "Hashtags, mentions, external links, topics, and keywords",
+      "classification": "Post type, sentiment, category, and behavioral flags",
+      "raw_data": "Original unprocessed data for reference"
+    },
+    "api_endpoint": "POST /webhook/posts-detailed",
+    "request_body": {
+      "url": "https://linkedin.com/in/username",
+      "secret": "your_webhook_secret",
+      "max_posts": 20
+    }
+  }
+}
