@@ -74,7 +74,7 @@ async function extractProfile(profileUrl) {
       education: JSON.stringify(extractEducation(data.text)),
       skills: extractSkills(data.text),
       connections: '',
-      profilePicture: '',
+      profilePicture: data.image || '',
       email: '',
       phone: '',
       website: '',
@@ -125,14 +125,14 @@ async function extractProfile(profileUrl) {
   }
 }
 
-// Helper: Extract company data
-async function extractCompany(companyUrl) {
+// Helper: Extract posts with detailed JSON
+async function extractPostsDetailed(profileUrl, maxPosts = 20) {
   const startTime = Date.now();
   try {
     const response = await axios.post('https://api.exa.ai/search', {
-      query: companyUrl,
+      query: `${profileUrl} posts site:linkedin.com`,
       type: 'keyword',
-      numResults: 1,
+      numResults: maxPosts,
       contents: {
         text: true,
       },
@@ -143,107 +143,279 @@ async function extractCompany(companyUrl) {
       },
     });
 
-    const data = response.data.results[0];
+    const posts = [];
     
-    const companyData = {
-      url: companyUrl,
-      name: extractCompanyName(data.text),
-      industry: extractIndustry(data.text),
-      size: extractCompanySize(data.text),
-      headquarters: extractHeadquarters(data.text),
-      website: extractWebsite(data.text),
-      description: extractDescription(data.text),
-      specialties: extractSpecialties(data.text),
-      founded: extractFounded(data.text),
-      employeeCount: '',
-      followerCount: '',
-      logo: '',
-      extractionDate: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-      status: 'Success',
-      error: '',
-    };
+    for (const result of response.data.results) {
+      // Extract detailed post information
+      const postData = {
+        metadata: {
+          post_url: result.url,
+          post_id: extractPostId(result.url),
+          author_name: extractAuthorName(result.text),
+          author_profile_url: profileUrl,
+          posted_date: extractPostDate(result.text),
+          extraction_timestamp: new Date().toISOString(),
+        },
+        content: {
+          full_text: extractFullContent(result.text),
+          summary: extractContentSummary(result.text),
+          content_type: determineContentType(result.text),
+          language: 'en',
+          word_count: countWords(extractFullContent(result.text)),
+          character_count: extractFullContent(result.text).length,
+        },
+        engagement: {
+          likes: parseInt(extractLikes(result.text)) || 0,
+          comments: parseInt(extractComments(result.text)) || 0,
+          shares: parseInt(extractShares(result.text)) || 0,
+          views: parseInt(extractViews(result.text)) || 0,
+          engagement_rate: calculateEngagementRate(result.text),
+        },
+        media: {
+          has_media: checkHasMedia(result.text),
+          media_type: extractMediaType(result.text),
+          media_urls: extractMediaUrls(result.text, result.image),
+          image_count: countImages(result.text),
+          video_count: countVideos(result.text),
+        },
+        topics: {
+          hashtags: extractHashtagsArray(result.text),
+          mentions: extractMentions(result.text),
+          links: extractLinks(result.text),
+          topics: extractTopics(result.text),
+          keywords: extractKeywords(result.text),
+        },
+        classification: {
+          post_type: classifyPostType(result.text),
+          sentiment: analyzeSentiment(result.text),
+          category: categorizePost(result.text),
+          is_promotional: isPromotional(result.text),
+          is_question: isQuestion(result.text),
+        },
+        raw_data: {
+          raw_text: result.text.substring(0, 1000),
+          source: 'Exa AI',
+        }
+      };
+      
+      posts.push(postData);
 
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SPREADSHEET_ID,
-      range: 'Companies!A:P',
-      valueInputOption: 'USER_ENTERED',
-      resource: {
-        values: [Object.values(companyData)],
-      },
-    });
+      // Write to Posts JSON Detailed sheet
+      const fullJson = JSON.stringify(postData);
+      const metadataJson = JSON.stringify(postData.metadata);
+      const contentJson = JSON.stringify(postData.content);
+      const engagementJson = JSON.stringify(postData.engagement);
+      const mediaJson = JSON.stringify(postData.media);
+      const topicsJson = JSON.stringify(postData.topics);
+      const classificationJson = JSON.stringify(postData.classification);
 
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    await logExtraction('Company', companyUrl, 'Success', 1, duration);
-
-    return { success: true, data: companyData };
-  } catch (error) {
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    await logExtraction('Company', companyUrl, 'Failed', 0, duration, error.message);
-    throw error;
-  }
-}
-
-// Helper: Extract posts
-async function extractPosts(profileUrl) {
-  const startTime = Date.now();
-  try {
-    const response = await axios.post('https://api.exa.ai/search', {
-      query: `${profileUrl} posts`,
-      type: 'keyword',
-      numResults: 10,
-      contents: {
-        text: true,
-      },
-    }, {
-      headers: {
-        'x-api-key': EXA_API_KEY,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const posts = response.data.results.map(post => ({
-      url: post.url,
-      authorName: extractAuthorName(post.text),
-      authorProfile: profileUrl,
-      postType: 'Post',
-      content: extractPostContent(post.text),
-      postedDate: extractPostDate(post.text),
-      likes: extractLikes(post.text),
-      comments: extractComments(post.text),
-      shares: extractShares(post.text),
-      views: extractViews(post.text),
-      mediaUrls: '',
-      hashtags: extractHashtags(post.text),
-      extractionDate: new Date().toISOString(),
-      status: 'Success',
-      error: '',
-    }));
-
-    // Batch write to Posts sheet
-    if (posts.length > 0) {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Posts!A:O',
+        range: 'Posts JSON Detailed!A:J',
         valueInputOption: 'USER_ENTERED',
         resource: {
-          values: posts.map(p => Object.values(p)),
+          values: [[
+            postData.metadata.post_url,
+            postData.metadata.author_name,
+            fullJson,
+            metadataJson,
+            contentJson,
+            engagementJson,
+            mediaJson,
+            topicsJson,
+            classificationJson,
+            postData.metadata.extraction_timestamp
+          ]],
         },
       });
     }
-
+    
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    await logExtraction('Posts', profileUrl, 'Success', posts.length, duration);
+    await logExtraction('Posts JSON Detailed', profileUrl, 'Success', posts.length, duration);
 
-    return { success: true, data: posts };
+    return { success: true, data: { profile_url: profileUrl, total_posts: posts.length, posts } };
   } catch (error) {
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    await logExtraction('Posts', profileUrl, 'Failed', 0, duration, error.message);
+    await logExtraction('Posts JSON Detailed', profileUrl, 'Failed', 0, duration, error.message);
     throw error;
   }
 }
 
-// Text extraction helpers (basic implementations - enhance as needed)
+// Enhanced extraction helper functions
+function extractPostId(url) {
+  const match = url.match(/activity-(\d+)/);
+  return match ? match[1] : '';
+}
+
+function extractFullContent(text) {
+  const lines = text.split('\n');
+  const contentLines = lines.filter(line => {
+    const trimmed = line.trim();
+    return trimmed.length > 20 && 
+           !trimmed.startsWith('Like') && 
+           !trimmed.startsWith('Comment') &&
+           !trimmed.startsWith('Share') &&
+           !trimmed.includes('followers') &&
+           !trimmed.includes('connections');
+  });
+  return contentLines.join(' ').substring(0, 2000);
+}
+
+function extractContentSummary(text) {
+  const content = extractFullContent(text);
+  return content.substring(0, 200) + (content.length > 200 ? '...' : '');
+}
+
+function determineContentType(text) {
+  if (text.includes('video') || text.includes('watch')) return 'video';
+  if (text.includes('image') || text.includes('photo')) return 'image';
+  if (text.includes('article') || text.includes('read more')) return 'article';
+  if (text.includes('poll')) return 'poll';
+  return 'text';
+}
+
+function countWords(text) {
+  return text.split(/\s+/).filter(word => word.length > 0).length;
+}
+
+function calculateEngagementRate(text) {
+  const likes = parseInt(extractLikes(text)) || 0;
+  const comments = parseInt(extractComments(text)) || 0;
+  const shares = parseInt(extractShares(text)) || 0;
+  const views = parseInt(extractViews(text)) || 1;
+  
+  const totalEngagement = likes + comments + shares;
+  return views > 0 ? ((totalEngagement / views) * 100).toFixed(2) + '%' : 'N/A';
+}
+
+function checkHasMedia(text) {
+  return text.includes('image') || text.includes('video') || text.includes('photo');
+}
+
+function extractMediaType(text) {
+  if (text.includes('video')) return 'video';
+  if (text.includes('image') || text.includes('photo')) return 'image';
+  if (text.includes('document') || text.includes('pdf')) return 'document';
+  return 'none';
+}
+
+function extractMediaUrls(text, imageUrl) {
+  const urls = text.match(/https?:\/\/[^\s]+/g) || [];
+  const mediaUrls = urls.filter(url => 
+    url.includes('image') || 
+    url.includes('video') || 
+    url.includes('media') ||
+    url.includes('.jpg') ||
+    url.includes('.png') ||
+    url.includes('.mp4')
+  );
+  if (imageUrl) mediaUrls.push(imageUrl);
+  return mediaUrls;
+}
+
+function countImages(text) {
+  const imageMatches = text.match(/image|photo|picture/gi);
+  return imageMatches ? imageMatches.length : 0;
+}
+
+function countVideos(text) {
+  const videoMatches = text.match(/video|watch/gi);
+  return videoMatches ? videoMatches.length : 0;
+}
+
+function extractHashtagsArray(text) {
+  const hashtags = text.match(/#[\w]+/g) || [];
+  return hashtags;
+}
+
+function extractMentions(text) {
+  const mentions = text.match(/@[\w]+/g) || [];
+  return mentions;
+}
+
+function extractLinks(text) {
+  const links = text.match(/https?:\/\/[^\s]+/g) || [];
+  return links.filter(link => !link.includes('linkedin.com/in/'));
+}
+
+function extractTopics(text) {
+  const topics = [];
+  const topicKeywords = {
+    'technology': ['AI', 'tech', 'software', 'digital', 'innovation'],
+    'business': ['business', 'strategy', 'growth', 'revenue', 'market'],
+    'leadership': ['leadership', 'management', 'team', 'culture'],
+    'career': ['career', 'job', 'hiring', 'opportunity'],
+    'education': ['learning', 'education', 'training', 'course'],
+  };
+  
+  for (const [topic, keywords] of Object.entries(topicKeywords)) {
+    if (keywords.some(keyword => text.toLowerCase().includes(keyword.toLowerCase()))) {
+      topics.push(topic);
+    }
+  }
+  
+  return topics;
+}
+
+function extractKeywords(text) {
+  const words = text.toLowerCase().split(/\s+/);
+  const stopWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for'];
+  const keywords = words
+    .filter(word => word.length > 4 && !stopWords.includes(word))
+    .slice(0, 10);
+  return [...new Set(keywords)];
+}
+
+function classifyPostType(text) {
+  if (text.includes('hiring') || text.includes('job opening')) return 'job_posting';
+  if (text.includes('article') || text.includes('blog')) return 'article_share';
+  if (text.includes('congratulations') || text.includes('proud to announce')) return 'announcement';
+  if (text.includes('?') && text.split('?').length > 2) return 'question';
+  if (text.includes('check out') || text.includes('learn more')) return 'promotional';
+  return 'general_update';
+}
+
+function analyzeSentiment(text) {
+  const positiveWords = ['great', 'excellent', 'amazing', 'wonderful', 'fantastic', 'love', 'excited'];
+  const negativeWords = ['bad', 'terrible', 'awful', 'disappointed', 'unfortunately', 'sad'];
+  
+  const lowerText = text.toLowerCase();
+  const positiveCount = positiveWords.filter(word => lowerText.includes(word)).length;
+  const negativeCount = negativeWords.filter(word => lowerText.includes(word)).length;
+  
+  if (positiveCount > negativeCount) return 'positive';
+  if (negativeCount > positiveCount) return 'negative';
+  return 'neutral';
+}
+
+function categorizePost(text) {
+  const categories = {
+    'thought_leadership': ['insights', 'perspective', 'believe', 'think'],
+    'company_news': ['announce', 'launch', 'release', 'introducing'],
+    'personal_story': ['my journey', 'my experience', 'I learned'],
+    'industry_news': ['industry', 'market', 'trend', 'report'],
+    'engagement': ['what do you think', 'share your', 'let me know'],
+  };
+  
+  for (const [category, keywords] of Object.entries(categories)) {
+    if (keywords.some(keyword => text.toLowerCase().includes(keyword))) {
+      return category;
+    }
+  }
+  
+  return 'general';
+}
+
+function isPromotional(text) {
+  const promotionalKeywords = ['buy', 'purchase', 'discount', 'offer', 'sale', 'limited time', 'sign up'];
+  return promotionalKeywords.some(keyword => text.toLowerCase().includes(keyword));
+}
+
+function isQuestion(text) {
+  return text.includes('?') || text.toLowerCase().includes('what do you think');
+}
+
+// Basic extraction helpers
 function extractName(text) {
   const lines = text.split('\n').filter(l => l.trim());
   return lines[0] || 'Unknown';
@@ -285,62 +457,35 @@ function extractSkills(text) {
   return '';
 }
 
-function extractCompanyName(text) {
-  const lines = text.split('\n').filter(l => l.trim());
-  return lines[0] || 'Unknown';
-}
-
-function extractIndustry(text) {
-  const match = text.match(/Industry[:\s]+([^\n]+)/i);
-  return match ? match[1].trim() : '';
-}
-
-function extractCompanySize(text) {
-  const match = text.match(/(\d+[-–]\d+|\d+\+)\s+employees/i);
-  return match ? match[1] : '';
-}
-
-function extractHeadquarters(text) {
-  const match = text.match(/Headquarters[:\s]+([^\n]+)/i);
-  return match ? match[1].trim() : '';
-}
-
-function extractWebsite(text) {
-  const match = text.match(/https?:\/\/[^\s]+/);
-  return match ? match[0] : '';
-}
-
-function extractDescription(text) {
-  return text.substring(0, 500);
-}
-
-function extractSpecialties(text) {
-  const match = text.match(/Specialties[:\s]+([^\n]+)/i);
-  return match ? match[1].trim() : '';
-}
-
-function extractFounded(text) {
-  const match = text.match(/Founded[:\s]+(\d{4})/i);
-  return match ? match[1] : '';
-}
-
 function extractAuthorName(text) {
   const lines = text.split('\n').filter(l => l.trim());
   return lines[0] || 'Unknown';
 }
 
-function extractPostContent(text) {
-  return text.substring(0, 1000);
-}
-
 function extractPostDate(text) {
-  const match = text.match(/(\d{1,2}\s+(?:hours?|days?|weeks?|months?)\s+ago)/i);
-  return match ? match[1] : '';
+  const patterns = [
+    /(\d{1,2}\s+(?:hours?|days?|weeks?|months?)\s+ago)/i,
+    /(\d{1,2}[hd])/i,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return match[1];
+  }
+  return 'Recent';
 }
 
 function extractLikes(text) {
-  const match = text.match(/(\d+(?:,\d+)*)\s*(?:likes?|reactions?)/i);
-  return match ? match[1].replace(/,/g, '') : '0';
+  const patterns = [
+    /(\d+(?:,\d+)*)\s*(?:likes?|reactions?)/i,
+    /(\d+(?:,\d+)*)\s*people reacted/i,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return match[1].replace(/,/g, '');
+  }
+  return '0';
 }
 
 function extractComments(text) {
@@ -383,38 +528,20 @@ app.post('/webhook/profile', async (req, res) => {
   }
 });
 
-app.post('/webhook/company', async (req, res) => {
+app.post('/webhook/posts-detailed', async (req, res) => {
   try {
-    const { url, secret } = req.body;
+    const { url, secret, max_posts } = req.body;
     
     if (secret !== WEBHOOK_SECRET) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
     if (!url) {
-      return res.status(400).json({ error: 'Company URL is required' });
+      return res.status(400).json({ error: 'Profile URL is required' });
     }
 
-    const result = await extractCompany(url);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/webhook/posts', async (req, res) => {
-  try {
-    const { url, secret } = req.body;
-    
-    if (secret !== WEBHOOK_SECRET) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    if (!url) {
-      return res.status(400).json({ error: 'Profile/Company URL is required' });
-    }
-
-    const result = await extractPosts(url);
+    const maxPosts = max_posts || 20;
+    const result = await extractPostsDetailed(url, maxPosts);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -423,7 +550,7 @@ app.post('/webhook/posts', async (req, res) => {
 
 app.post('/webhook/extract-all', async (req, res) => {
   try {
-    const { url, secret, includeProfile, includeCompany, includePosts } = req.body;
+    const { url, secret, includeProfile, includePosts, max_posts } = req.body;
     
     if (secret !== WEBHOOK_SECRET) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -439,13 +566,9 @@ app.post('/webhook/extract-all', async (req, res) => {
       results.profile = await extractProfile(url);
     }
 
-    if (includeCompany !== false && results.profile?.data?.company) {
-      const companyName = results.profile.data.company.toLowerCase().replace(/\s+/g, '-');
-      results.company = await extractCompany(`https://linkedin.com/company/${companyName}`);
-    }
-
     if (includePosts !== false) {
-      results.posts = await extractPosts(url);
+      const maxPosts = max_posts || 20;
+      results.posts = await extractPostsDetailed(url, maxPosts);
     }
 
     res.json({ success: true, data: results });
@@ -462,18 +585,19 @@ app.get('/health', (req, res) => {
     spreadsheetId: SPREADSHEET_ID,
     hasExaKey: !!EXA_API_KEY,
     hasHunterKey: !!HUNTER_API_KEY,
-    hasGoogleCreds: !!process.env.GOOGLE_CREDENTIALS
+    hasGoogleCreds: !!process.env.GOOGLE_CREDENTIALS,
+    version: '1.1.0',
+    features: ['profile_extraction', 'posts_json_detailed', 'extract_all']
   });
 });
 
 app.get('/', (req, res) => {
   res.json({
     service: 'LinkedIn Data Extractor',
-    version: '1.0.0',
+    version: '1.1.0',
     endpoints: {
       profile: 'POST /webhook/profile',
-      company: 'POST /webhook/company',
-      posts: 'POST /webhook/posts',
+      postsDetailed: 'POST /webhook/posts-detailed',
       extractAll: 'POST /webhook/extract-all',
       health: 'GET /health'
     },
@@ -481,34 +605,9 @@ app.get('/', (req, res) => {
   });
 });
 
-// Periodic update cron job (runs daily at 2 AM)
-if (process.env.ENABLE_CRON === 'true') {
-  cron.schedule('0 2 * * *', async () => {
-    console.log('Running periodic profile updates...');
-    try {
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: 'Profiles!A2:A',
-      });
-
-      const profileUrls = response.data.values?.map(row => row[0]) || [];
-      
-      for (const url of profileUrls) {
-        try {
-          await extractProfile(url);
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Rate limiting
-        } catch (error) {
-          console.error(`Failed to update ${url}:`, error.message);
-        }
-      }
-    } catch (error) {
-      console.error('Periodic update failed:', error.message);
-    }
-  });
-}
-
 app.listen(PORT, () => {
-  console.log(`LinkedIn Data Extractor webhook service running on port ${PORT}`);
+  console.log(`LinkedIn Data Extractor v1.1.0 running on port ${PORT}`);
   console.log(`Spreadsheet ID: ${SPREADSHEET_ID}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`Features: Profile extraction, Posts JSON detailed, Extract all`);
 });
